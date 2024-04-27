@@ -69,6 +69,11 @@ ID2D1Bitmap* bmpField2 = nullptr;
 ID2D1Bitmap* bmpBanana = nullptr;
 ID2D1Bitmap* bmpExit = nullptr;
 ID2D1Bitmap* bmpPlatform = nullptr;
+ID2D1Bitmap* bmpSun = nullptr;
+ID2D1Bitmap* bmpCloud1 = nullptr;
+ID2D1Bitmap* bmpCloud2 = nullptr;
+ID2D1Bitmap* bmpDizzy = nullptr;
+ID2D1Bitmap* bmpRock = nullptr;
 
 ID2D1Bitmap* bmpHero[6] = { nullptr };
 ID2D1Bitmap* bmpGorilla1[35] = { nullptr };
@@ -86,6 +91,8 @@ bool b2Hglt = false;
 bool b3Hglt = false;
 bool set_name = false;
 
+int dizzy_cooldown = 0;
+
 wchar_t current_player[16] = L"JUNGLE RUNNER";
 
 D2D1_RECT_F b1Rect = { 0, 0, 200.0f, 50.0f };
@@ -99,10 +106,22 @@ D2D1_RECT_F b3TxtRect = { 520.0f, 0, scr_width, 50.0f };
 D2D1_RECT_F Field1Rect = { 0,50.0f,scr_width,scr_height };
 D2D1_RECT_F Field2Rect = { scr_width,50.0f,scr_width + 700.0f,scr_height };
 
+dll::ATOM Sun(400.0f, 60.0f, 100.0f, 100.0f);
+dll::ATOM Cloud1(0, 70.0f, 100.0f, 53.0f);
+dll::ATOM Cloud2(scr_width, 80.0f, 100.0f, 52.0f);
+
 int score = 0;
 int speed = 1;
 int minutes = 0;
 int seconds = 300;
+
+// CREATURES *****************************************
+
+dll::creat_ptr Hero = nullptr;
+std::vector<dll::creat_ptr> vGorillas;
+
+std::vector<dll::ATOM>vRocks;
+
 
 //////////////////////////////////////////////////////
 
@@ -133,12 +152,17 @@ void ReleaseCOM()
     ClearIt(&iWriteFactory);
     ClearIt(&nrmTxt);
     ClearIt(&bigTxt);
+    ClearIt(&bmpDizzy);
+    ClearIt(&bmpRock);
 
     ClearIt(&bmpBanana);
     ClearIt(&bmpExit);
     ClearIt(&bmpField1);
     ClearIt(&bmpField2);
     ClearIt(&bmpPlatform);
+    ClearIt(&bmpSun);
+    ClearIt(&bmpCloud1);
+    ClearIt(&bmpCloud2);
     for (int i = 0; i < 6; ++i)ClearIt(&bmpHero[i]);
     for (int i = 0; i < 35; ++i)ClearIt(&bmpGorilla1[i]);
     for (int i = 0; i < 4; ++i)ClearIt(&bmpGorilla2[i]);
@@ -171,6 +195,17 @@ void InitGame()
     seconds = 300;
     wcscpy_s(current_player, L"JUNGLE RUNNER");
     set_name = false;
+    dizzy_cooldown = 0;
+    vRocks.clear();
+
+    ClearIt(&Hero);
+    if (!vGorillas.empty())
+    {
+        for (int i = 0; i < vGorillas.size(); ++i)ClearIt(&vGorillas[i]);
+    }
+    vGorillas.clear();
+
+    Hero = dll::iFactory(dll::types::hero, scr_height - 180.0f);
 }
 
 INT_PTR CALLBACK bDlgProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lParam)
@@ -256,6 +291,7 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
     case WM_TIMER:
         if (pause)break;
         seconds--;
+        if (dizzy_cooldown > 0)dizzy_cooldown--;
         minutes = (int)(floor(seconds / 60));
         break;
 
@@ -377,6 +413,31 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
         }
         break;
 
+    case WM_KEYDOWN:
+        if (dizzy_cooldown > 0)break;
+        if (Hero)
+        {
+            if(Hero->dir != dll::dirs::up && Hero->dir!=dll::dirs::down)
+                switch (LOWORD(wParam))
+                {
+                case VK_LEFT:
+                    Hero->dir = dll::dirs::left;
+                    break;
+
+                case VK_RIGHT:
+                    Hero->dir = dll::dirs::right;
+                    break;
+
+                case VK_UP:
+                    Hero->Jump();
+                    break;
+
+                case VK_DOWN:
+                    Hero->dir = dll::dirs::stop;
+                    break;
+                }
+        }
+        break;
 
     default: return DefWindowProc(hwnd, ReceivedMsg, wParam, lParam);
     }
@@ -541,6 +602,36 @@ void CreateResources()
         LogError(L"Error loading Platform");
         ErrExit(eD2D);
     }
+    bmpSun = Load(L".\\res\\img\\sun.png", Draw);
+    if (!bmpSun)
+    {
+        LogError(L"Error loading Sun");
+        ErrExit(eD2D);
+    }
+    bmpCloud1 = Load(L".\\res\\img\\cloud1.png", Draw);
+    if (!bmpCloud1)
+    {
+        LogError(L"Error loading Cloud1");
+        ErrExit(eD2D);
+    }
+    bmpCloud2 = Load(L".\\res\\img\\cloud2.png", Draw);
+    if (!bmpCloud2)
+    {
+        LogError(L"Error loading Cloud2");
+        ErrExit(eD2D);
+    }
+    bmpDizzy = Load(L".\\res\\img\\dizzy.png", Draw);
+    if (!bmpDizzy)
+    {
+        LogError(L"Error loading Dizzy");
+        ErrExit(eD2D);
+    }
+    bmpRock = Load(L".\\res\\img\\rock.png", Draw);
+    if (!bmpRock)
+    {
+        LogError(L"Error loading Rock");
+        ErrExit(eD2D);
+    }
 
     for (int i = 0; i < 6; i++)
     {
@@ -617,7 +708,7 @@ void CreateResources()
     ////////////////////////////////////////////////////////
 
     D2D1_RECT_F Rup_text = { 75.0f,-50.0f,scr_width,50.0f };
-    D2D1_RECT_F Rdown_text = { 75.0f,scr_height + 50.0f,scr_width,scr_height };
+    D2D1_RECT_F Rdown_text = { 75.0f,scr_height,scr_width,scr_height + 50.0f };
 
     bool up_in_place = false;
     bool down_in_place = false;
@@ -643,7 +734,6 @@ void CreateResources()
             Draw->DrawTextW(L"БЕСНИ ГОРИЛИ !", 15, bigTxt, Rup_text, Txt);
             Draw->DrawTextW(L"dev. Daniel !", 14, bigTxt, Rdown_text, Txt);
             Draw->EndDraw();
-            Sleep(10);
         }
     }
     Sleep(2000);
@@ -688,7 +778,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
         ///////////////////////////////////////////////////////////
 
+        if (vRocks.size() < 2 && rand() % 100 == 6)
+        {
+            vRocks.push_back(dll::ATOM(scr_width, scr_height - 138, 50.0f, 38.0f));
+        }
 
+        // HERO ******************************
+
+        if (Hero)
+        {
+            if (Hero->dir == dll::dirs::up || Hero->dir == dll::dirs::down)Hero->Jump();
+            else Hero->Move((float)(speed));
+        }
+
+
+
+        /////////////////////////////////////
 
 
 
@@ -720,22 +825,81 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
         Draw->DrawBitmap(bmpField1, Field1Rect);
         Draw->DrawBitmap(bmpField2, Field2Rect);
-        Field1Rect.left -= speed;
-        Field1Rect.right -= speed;
-        if (Field1Rect.right <= 0)
+        if (Hero)
         {
-            Field1Rect.left = Field2Rect.right;
-            Field1Rect.right = Field1Rect.left + 700.0f;
+            if (Hero->dir != dll::dirs::stop)
+            {
+                Field1Rect.left -= speed;
+                Field1Rect.right -= speed;
+                if (Field1Rect.right <= 0)
+                {
+                    Field1Rect.left = Field2Rect.right;
+                    Field1Rect.right = Field1Rect.left + 700.0f;
+                }
+                Field2Rect.left -= speed;
+                Field2Rect.right -= speed;
+                if (Field2Rect.right <= 0)
+                {
+                    Field2Rect.left = Field1Rect.right;
+                    Field2Rect.right = Field2Rect.left + 700.0f;
+                }
+
+                if (vRocks.size() > 0)
+                {
+                    for (int i = 0; i < vRocks.size(); i++)
+                    {
+                        vRocks[i].x -= speed;
+                        vRocks[i].SetEdges();
+                        if (!(Hero->x >= vRocks[i].ex || Hero->ex <= vRocks[i].x || Hero->y >= vRocks[i].ey || Hero->ey <= vRocks[i].y))
+                        {
+                            vRocks.erase(vRocks.begin() + i);
+                            dizzy_cooldown = 3;
+                            if (Hero->dir != dll::dirs::up && Hero->dir != dll::dirs::down)Hero->dir = dll::dirs::stop;
+                            break;
+                        }
+                        if (vRocks[i].ex <= 0)
+                        {
+                            vRocks.erase(vRocks.begin() + i);
+                            break;
+                        }
+                    }
+                }
+            }
+            
         }
-        Field2Rect.left -= speed;
-        Field2Rect.right -= speed;
-        if (Field2Rect.right <= 0)
+        Cloud1.x += 0.5f;
+        Cloud1.SetEdges();
+        Cloud2.x -= 0.3f;
+        Cloud2.SetEdges();
+        if (Cloud1.x >= scr_width)
         {
-            Field2Rect.left = Field1Rect.right;
-            Field2Rect.right = Field2Rect.left + 700.0f;
+            Cloud1.x = -100.0f;
+            Cloud1.SetEdges();
         }
+        if (Cloud2.ex <= 0)
+        {
+            Cloud2.x = scr_width;
+            Cloud2.SetEdges();
+        }
+        Draw->DrawBitmap(bmpSun, D2D1::RectF(Sun.x, Sun.y, Sun.ex, Sun.ey));
+        Draw->DrawBitmap(bmpCloud1, D2D1::RectF(Cloud1.x, Cloud1.y, Cloud1.ex, Cloud1.ey));
+        Draw->DrawBitmap(bmpCloud2, D2D1::RectF(Cloud2.x, Cloud2.y, Cloud2.ex, Cloud2.ey));
+        ////////////////////////////////////////////////////////////
+
+        if (Hero)
+        {
+            if(Hero->dir==dll::dirs::stop)
+                Draw->DrawBitmap(bmpHero[3], D2D1::RectF(Hero->x, Hero->y, Hero->ex, Hero->ey));
+            else Draw->DrawBitmap(bmpHero[Hero->GetFrame()], D2D1::RectF(Hero->x, Hero->y, Hero->ex, Hero->ey));
+            if (dizzy_cooldown > 0)Draw->DrawBitmap(bmpDizzy, D2D1::RectF(Hero->x, Hero->y - 25.0f, Hero->x + 50.0f, 
+                Hero->y + 23.0f));
+        }
+        if (vRocks.size() > 0)
+        {
+            for (int i = 0; i < vRocks.size(); i++)
+                Draw->DrawBitmap(bmpRock, D2D1::RectF(vRocks[i].x, vRocks[i].y, vRocks[i].ex, vRocks[i].ey));
         
-        
+        }
 
         ////////////////////////////////////////////////////////
 
