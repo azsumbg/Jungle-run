@@ -63,6 +63,7 @@ ID2D1SolidColorBrush* HgltTxt = nullptr;
 IDWriteFactory* iWriteFactory = nullptr;
 IDWriteTextFormat* nrmTxt = nullptr;
 IDWriteTextFormat* bigTxt = nullptr;
+IDWriteTextFormat* statusTxt = nullptr;
 
 ID2D1Bitmap* bmpField1 = nullptr;
 ID2D1Bitmap* bmpField2 = nullptr;
@@ -115,6 +116,7 @@ int score = 0;
 int speed = 1;
 int minutes = 0;
 int seconds = 300;
+int bananas = 0;
 
 // CREATURES *****************************************
 
@@ -123,7 +125,9 @@ std::vector<dll::creat_ptr> vGorillas;
 
 std::vector<dll::ATOM>vRocks;
 std::vector<dll::ATOM>vPlatforms;
-float current_platform_y = 0;
+std::vector<dll::ATOM>vBananas;
+std::vector<dll::ATOM>vShots;
+
 
 //////////////////////////////////////////////////////
 
@@ -154,6 +158,7 @@ void ReleaseCOM()
     ClearIt(&iWriteFactory);
     ClearIt(&nrmTxt);
     ClearIt(&bigTxt);
+    ClearIt(&statusTxt);
     ClearIt(&bmpDizzy);
     ClearIt(&bmpRock);
 
@@ -195,18 +200,23 @@ void InitGame()
     speed = 1;
     minutes = 0;
     seconds = 300;
+    bananas = 0;
+
     wcscpy_s(current_player, L"JUNGLE RUNNER");
     set_name = false;
     dizzy_cooldown = 0;
     vRocks.clear();
 
     ClearIt(&Hero);
+    
     if (!vGorillas.empty())
     {
         for (int i = 0; i < vGorillas.size(); ++i)ClearIt(&vGorillas[i]);
     }
     vGorillas.clear();
     vPlatforms.clear();
+    vBananas.clear();
+    vShots.clear();
 
     Hero = dll::iFactory(dll::types::hero, scr_height - 180.0f);
 }
@@ -438,6 +448,19 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
                 case VK_DOWN:
                     Hero->dir = dll::dirs::stop;
                     break;
+
+                case VK_SHIFT:
+                    if (bananas < 1 || dizzy_cooldown > 0)
+                    {
+                        if (sound)mciSendString(L"play .\\res\\snd\\negative.wav", NULL, NULL, NULL);
+                        break;
+                    }
+                    bananas--;
+                    if (Hero)
+                        vShots.push_back(dll::ATOM(Hero->ex, Hero->y + 30.0f, 20.0f, 13.0f));
+                    if (sound)mciSendString(L"play .\\res\\snd\\splash.wav", NULL, NULL, NULL);
+                    break;
+
                 }
         }
         break;
@@ -570,6 +593,13 @@ void CreateResources()
         if (hr != S_OK)
         {
             LogError(L"Error creating D2D1 bigTxt");
+            ErrExit(eD2D);
+        }
+        hr = iWriteFactory->CreateTextFormat(L"Gabriola", NULL, DWRITE_FONT_WEIGHT_BLACK, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, 28, L"", &statusTxt);
+        if (hr != S_OK)
+        {
+            LogError(L"Error creating D2D1 statusTxt");
             ErrExit(eD2D);
         }
     }
@@ -710,8 +740,8 @@ void CreateResources()
     }
     ////////////////////////////////////////////////////////
 
-    D2D1_RECT_F Rup_text = { 75.0f,-50.0f,scr_width,50.0f };
-    D2D1_RECT_F Rdown_text = { 75.0f,scr_height,scr_width,scr_height + 50.0f };
+    D2D1_RECT_F Rup_text = { 100.0f,-20.0f,scr_width,50.0f };
+    D2D1_RECT_F Rdown_text = { 150.0f,scr_height,scr_width,scr_height + 50.0f };
 
     bool up_in_place = false;
     bool down_in_place = false;
@@ -721,14 +751,14 @@ void CreateResources()
     {
         if (!up_in_place)
         {
-            Rup_text.top += 0.8f;
-            Rup_text.bottom += 0.8f;
+            Rup_text.top += 1.2f;
+            Rup_text.bottom += 1.2f;
             if (Rup_text.bottom >= scr_height / 2)up_in_place = true;
         }
         if (!down_in_place)
         {
-            Rdown_text.top -= 0.8f;
-            Rdown_text.bottom -= 0.8f;
+            Rdown_text.top -= 1.2f;
+            Rdown_text.bottom -= 1.2f;
             if (Rdown_text.top <= scr_height / 2 + 50.0f)down_in_place = true;
         }
         if (Txt && bigTxt)
@@ -799,18 +829,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                     Hero->y = scr_height - 180.0f;
                     Hero->SetEdges();
                     on_platform = true;
-                    current_platform_y = scr_height - 180.0f;
+                    
                 }
                 if (!vPlatforms.empty())
                 {
                     for (int i = 0; i < vPlatforms.size(); ++i)
                     {
-                        if (!(Hero->x >= vPlatforms[i].ex || Hero->ex <= vPlatforms[i].x
-                            || Hero->y >= vPlatforms[i].ey || Hero->ey <= vPlatforms[i].y))
+                        if (!(Hero->x > vPlatforms[i].ex || Hero->ex < vPlatforms[i].x
+                            || Hero->y > vPlatforms[i].ey || Hero->ey < vPlatforms[i].y))
                         {
                             Hero->SetEdges();
                             on_platform = true;
-                            current_platform_y = vPlatforms[i].y;                 
+                                          
                             break;
                         }
                     }
@@ -826,12 +856,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                     {
                         for (int i = 0; i < vPlatforms.size(); ++i)
                         {
-                            if (!(Hero->x >= vPlatforms[i].ex || Hero->ex <= vPlatforms[i].x
-                                || Hero->y >= vPlatforms[i].ey || Hero->ey <= vPlatforms[i].y))
+                            if (!(Hero->x > vPlatforms[i].ex || Hero->ex < vPlatforms[i].x
+                                || Hero->y > vPlatforms[i].ey || Hero->ey < vPlatforms[i].y))
                             {
                                 Hero->SetEdges();
                                 on_platform = true;
-                                current_platform_y = vPlatforms[i].y;
                                 Hero->dir = dll::dirs::stop;
                                 break;
                             }
@@ -858,7 +887,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                     Hero->SetEdges();
                     Hero->dir = dll::dirs::stop;
                     on_platform = true;
-                    current_platform_y = scr_height - 180.0f;
+                    
                 }
             }
         }
@@ -888,13 +917,111 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 }
             }
         }
-        
+
+        if (Hero)
+        {
+            if (Hero->y < scr_height - 180 && on_platform && !vPlatforms.empty())
+            {
+                for (std::vector<dll::ATOM>::iterator it = vPlatforms.begin(); it < vPlatforms.end(); it++)
+                {
+                    if (!(Hero->x >= it->ex || Hero->ex <= it->x || Hero->y >= it->ey || Hero->ey <= it->y))
+                    {
+                        if (Hero->ey > it->y + 5)
+                        {
+                            Hero->ey = it->y;
+                            Hero->y = Hero->ey - Hero->GetHeight();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        /////////////////////////////////////
+
+        //BANANAS ***************************
+
+        if (vBananas.size() < 5 && rand() % 150 == 13)
+            vBananas.push_back(dll::ATOM(scr_width + (float)(rand() % 30), (float)(rand() % 300 + 100), 20.0f, 13.0f));
+
+        if (!vBananas.empty())
+        {
+            for (std::vector<dll::ATOM>::iterator it = vBananas.begin(); it < vBananas.end(); it++)
+            {
+                if (Hero)
+                    if (Hero->dir == dll::dirs::stop)break;
+                it->x -= speed;
+                it->SetEdges();
+                if (it->ex < 0)
+                {
+                    vBananas.erase(it);
+                    break;
+                }
+            }
+        }
+        if (Hero && !vBananas.empty())
+        {
+            for (std::vector<dll::ATOM>::iterator ban = vBananas.begin(); ban < vBananas.end(); ++ban)
+            {
+                if (!(Hero->x > ban->ex || Hero->ex<ban->x || Hero->y>ban->ey || Hero->ey < ban->y))
+                {
+                    if (sound)mciSendString(L"play .\\res\\snd\\get.wav", NULL, NULL, NULL);
+                    score += 5 * speed;
+                    bananas++;
+                    vBananas.erase(ban);
+                    break;
+                }
+            }
+        }
+
+        if (!vShots.empty())
+        {
+            for (std::vector<dll::ATOM>::iterator it = vShots.begin(); it < vShots.end(); it++)
+            {
+                it->x += 2.5f;
+                it->SetEdges();
+                if (it->ex > scr_width)
+                {
+                    vShots.erase(it);
+                    break;
+                }
+            }
+        }
 
         /////////////////////////////////////
 
+        //GORILLAS *************************
 
+        if (vGorillas.size() < 2 && rand() % 300 == 66)
+        {
+            int type = rand() % 3;
+            switch (type)
+            {
+            case 0:
+                vGorillas.push_back(dll::iFactory(dll::types::gorilla1, scr_height - 170.0f));
+                break;
 
+            case 1:
+                vGorillas.push_back(dll::iFactory(dll::types::gorilla2, scr_height - 200.0f));
+                break;
 
+            case 2:
+                vGorillas.push_back(dll::iFactory(dll::types::gorilla3, scr_height - 190.0f));
+                break;
+            }
+        }
+
+        if (!vGorillas.empty())
+        {
+            for (std::vector<dll::creat_ptr>::iterator it = vGorillas.begin(); it < vGorillas.end(); it++)
+            {
+                if ((*it)->Move(speed) == FAIL)
+                {
+                    (*it)->Release();
+                    vGorillas.erase(it);
+                    break;
+                }
+            }
+        }
 
 
 
@@ -947,7 +1074,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                     {
                         vRocks[i].x -= speed;
                         vRocks[i].SetEdges();
-                        if (!(Hero->x >= vRocks[i].ex || Hero->ex <= vRocks[i].x || Hero->y >= vRocks[i].ey || Hero->ey <= vRocks[i].y))
+                        if (!(Hero->x > vRocks[i].ex || Hero->ex < vRocks[i].x || Hero->y > vRocks[i].ey || Hero->ey < vRocks[i].y))
                         {
                             vRocks.erase(vRocks.begin() + i);
                             dizzy_cooldown = 3;
@@ -982,11 +1109,48 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
         Draw->DrawBitmap(bmpSun, D2D1::RectF(Sun.x, Sun.y, Sun.ex, Sun.ey));
         Draw->DrawBitmap(bmpCloud1, D2D1::RectF(Cloud1.x, Cloud1.y, Cloud1.ex, Cloud1.ey));
         Draw->DrawBitmap(bmpCloud2, D2D1::RectF(Cloud2.x, Cloud2.y, Cloud2.ex, Cloud2.ey));
+        
+        wchar_t stat_txt[200] = L"\0";
+        wchar_t add[5] = L"\0";
+        int txt_size = 0;
+
+        wcscpy_s(stat_txt, current_player);
+
+        wsprintf(add, L"%d", bananas);
+        wcscat_s(stat_txt, L", банани: ");
+        wcscat_s(stat_txt, add);
+
+        wsprintf(add, L"%d", score);
+        wcscat_s(stat_txt, L", резултат: ");
+        wcscat_s(stat_txt, add);
+        
+        wsprintf(add, L"%d", speed);
+        wcscat_s(stat_txt, L", скорост: ");
+        wcscat_s(stat_txt, add);
+
+        wsprintf(add, L"%d", minutes);
+        wcscat_s(stat_txt, L", ");
+        wcscat_s(stat_txt, add);
+
+        wsprintf(add, L"%d", seconds - minutes * 60);
+        wcscat_s(stat_txt, L" : ");
+        if (seconds - minutes * 60 < 10)wcscat_s(stat_txt, L"0");
+        wcscat_s(stat_txt, add);
+
+        for (int i = 0; i < 200; i++)
+        {
+            if (stat_txt[i] != '\0')txt_size++;
+            else break;
+        }
+
+        Draw->DrawTextW(stat_txt, txt_size, statusTxt, D2D1::RectF(20.0f, scr_height - 50.0f, scr_width, scr_height), InactTxt);
+        
         ////////////////////////////////////////////////////////////
 
         if (Hero)
         {
-            if(Hero->dir==dll::dirs::stop)
+            if(Hero->dir==dll::dirs::stop || Hero->dir==dll::dirs::up || Hero->dir == dll::dirs::down 
+                || Hero->dir == dll::dirs::fall)
                 Draw->DrawBitmap(bmpHero[3], D2D1::RectF(Hero->x, Hero->y, Hero->ex, Hero->ey));
             else Draw->DrawBitmap(bmpHero[Hero->GetFrame()], D2D1::RectF(Hero->x, Hero->y, Hero->ex, Hero->ey));
             if (dizzy_cooldown > 0)Draw->DrawBitmap(bmpDizzy, D2D1::RectF(Hero->x, Hero->y - 25.0f, Hero->x + 50.0f, 
@@ -1003,6 +1167,37 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
             for (int i = 0; i < vPlatforms.size(); ++i)
                 Draw->DrawBitmap(bmpPlatform, D2D1::RectF(vPlatforms[i].x, vPlatforms[i].y,
                     vPlatforms[i].ex, vPlatforms[i].ey));
+        }
+        if (!vBananas.empty())
+        {
+            for (std::vector<dll::ATOM>::iterator it = vBananas.begin(); it < vBananas.end(); it++)
+                Draw->DrawBitmap(bmpBanana, D2D1::RectF(it->x, it->y, it->ex, it->ey));
+
+        }
+        if (!vShots.empty())
+        {
+            for (std::vector<dll::ATOM>::iterator it = vShots.begin(); it < vShots.end(); it++)
+                Draw->DrawBitmap(bmpBanana, D2D1::RectF(it->x, it->y, it->ex, it->ey));
+        }
+        if (!vGorillas.empty())
+        {
+            for(std::vector<dll::creat_ptr>::iterator it = vGorillas.begin(); it < vGorillas.end(); ++it)
+            {
+                switch ((*it)->GetType())
+                {
+                case dll::types::gorilla1:
+                    Draw->DrawBitmap(bmpGorilla1[(*it)->GetFrame()], D2D1::RectF((*it)->x, (*it)->y, (*it)->ex, (*it)->ey));
+                    break;
+                
+                case dll::types::gorilla2:
+                    Draw->DrawBitmap(bmpGorilla2[(*it)->GetFrame()], D2D1::RectF((*it)->x, (*it)->y, (*it)->ex, (*it)->ey));
+                    break;
+                
+                case dll::types::gorilla3:
+                    Draw->DrawBitmap(bmpGorilla3[(*it)->GetFrame()], D2D1::RectF((*it)->x, (*it)->y, (*it)->ex, (*it)->ey));
+                    break;
+                }
+            }
         }
 
         ////////////////////////////////////////////////////////

@@ -125,6 +125,11 @@ namespace dll
 			float jump_ey = 0;
 			dirs jump_dir = dirs::stop;
 
+			types GetType()const
+			{
+				return type;
+			}
+			
 			virtual ~FACTORY() {};
 
 			virtual void Release() = 0;
