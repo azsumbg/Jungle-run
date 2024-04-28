@@ -15,7 +15,7 @@ constexpr int NaN = 1113;
 
 namespace dll
 {
-	enum class dirs { stop = 0, up = 1, down = 2, left = 3, right = 4 };
+	enum class dirs { stop = 0, up = 1, down = 2, left = 3, right = 4, fall = 5 };
 
 	enum class types { no_type = 0, gorilla1 = 1, gorilla2 = 2, gorilla3 = 3, hero = 4 };
 
@@ -132,6 +132,7 @@ namespace dll
 			virtual int GetFrame() = 0;
 			virtual int Move(float what_speed) = 0;
 			virtual int Jump() = 0;
+			virtual void Fall(float waht_speed) = 0;
 	};
 
 	typedef FACTORY* creat_ptr;

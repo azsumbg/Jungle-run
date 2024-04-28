@@ -90,6 +90,7 @@ bool b1Hglt = false;
 bool b2Hglt = false;
 bool b3Hglt = false;
 bool set_name = false;
+bool on_platform = true;
 
 int dizzy_cooldown = 0;
 
@@ -121,7 +122,8 @@ dll::creat_ptr Hero = nullptr;
 std::vector<dll::creat_ptr> vGorillas;
 
 std::vector<dll::ATOM>vRocks;
-
+std::vector<dll::ATOM>vPlatforms;
+float current_platform_y = 0;
 
 //////////////////////////////////////////////////////
 
@@ -204,6 +206,7 @@ void InitGame()
         for (int i = 0; i < vGorillas.size(); ++i)ClearIt(&vGorillas[i]);
     }
     vGorillas.clear();
+    vPlatforms.clear();
 
     Hero = dll::iFactory(dll::types::hero, scr_height - 180.0f);
 }
@@ -417,7 +420,7 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
         if (dizzy_cooldown > 0)break;
         if (Hero)
         {
-            if(Hero->dir != dll::dirs::up && Hero->dir!=dll::dirs::down)
+            if(Hero->dir != dll::dirs::up && Hero->dir!=dll::dirs::down && Hero->dir != dll::dirs::fall)
                 switch (LOWORD(wParam))
                 {
                 case VK_LEFT:
@@ -713,6 +716,7 @@ void CreateResources()
     bool up_in_place = false;
     bool down_in_place = false;
 
+    mciSendString(L"play .\\res\\snd\\intro.wav", NULL, NULL, NULL);
     while (!up_in_place || !down_in_place)
     {
         if (!up_in_place)
@@ -736,7 +740,7 @@ void CreateResources()
             Draw->EndDraw();
         }
     }
-    Sleep(2000);
+    Sleep(1000);
 }
 
 
@@ -787,11 +791,104 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
         if (Hero)
         {
-            if (Hero->dir == dll::dirs::up || Hero->dir == dll::dirs::down)Hero->Jump();
-            else Hero->Move((float)(speed));
+            if (Hero->dir == dll::dirs::left || Hero->dir == dll::dirs::right)
+            {
+                on_platform = false;
+                if (Hero->y >= scr_height - 180.0f)
+                {
+                    Hero->y = scr_height - 180.0f;
+                    Hero->SetEdges();
+                    on_platform = true;
+                    current_platform_y = scr_height - 180.0f;
+                }
+                if (!vPlatforms.empty())
+                {
+                    for (int i = 0; i < vPlatforms.size(); ++i)
+                    {
+                        if (!(Hero->x >= vPlatforms[i].ex || Hero->ex <= vPlatforms[i].x
+                            || Hero->y >= vPlatforms[i].ey || Hero->ey <= vPlatforms[i].y))
+                        {
+                            Hero->SetEdges();
+                            on_platform = true;
+                            current_platform_y = vPlatforms[i].y;                 
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if ((Hero->dir == dll::dirs::stop || Hero->dir == dll::dirs::down || Hero->dir == dll::dirs::fall)
+                    && Hero->y < scr_height - 180.0f)
+                {
+                    on_platform = false;
+                    if (!vPlatforms.empty())
+                    {
+                        for (int i = 0; i < vPlatforms.size(); ++i)
+                        {
+                            if (!(Hero->x >= vPlatforms[i].ex || Hero->ex <= vPlatforms[i].x
+                                || Hero->y >= vPlatforms[i].ey || Hero->ey <= vPlatforms[i].y))
+                            {
+                                Hero->SetEdges();
+                                on_platform = true;
+                                current_platform_y = vPlatforms[i].y;
+                                Hero->dir = dll::dirs::stop;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!on_platform) Hero->dir = dll::dirs::fall;
+            
+        }
+        
+
+        if (Hero)
+        {
+            if (Hero->dir == dll::dirs::up || Hero->dir == dll::dirs::down) Hero->Jump();
+            else if (Hero->dir == dll::dirs::left || Hero->dir == dll::dirs::right || Hero->dir == dll::dirs::stop)
+                Hero->Move((float)(speed));
+            else if (Hero->dir == dll::dirs::fall)
+            {
+                Hero->Fall((float)(speed));
+                if (Hero->y >= scr_height - 180.0f)
+                {
+                    Hero->y = scr_height - 180.0f;
+                    Hero->SetEdges();
+                    Hero->dir = dll::dirs::stop;
+                    on_platform = true;
+                    current_platform_y = scr_height - 180.0f;
+                }
+            }
         }
 
+        //PLATFROMS ************************
 
+        if (vPlatforms.size() < 2 && rand() % 200 == 66)
+            vPlatforms.push_back(dll::ATOM(scr_width, scr_height - 250.0f, 100.0f, 17.0f));
+
+        if (!vPlatforms.empty())
+        {
+            if (Hero)
+            {
+                if (Hero->dir != dll::dirs::stop)
+                {
+                    for (std::vector<dll::ATOM>::iterator it = vPlatforms.begin(); it < vPlatforms.end(); it++)
+                    {
+
+                        it->x -= speed;
+                        it->SetEdges();
+                        if (it->ex < 0)
+                        {
+                            vPlatforms.erase(it);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
 
         /////////////////////////////////////
 
@@ -854,6 +951,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                         {
                             vRocks.erase(vRocks.begin() + i);
                             dizzy_cooldown = 3;
+                            if (sound)mciSendString(L"play .\\res\\snd\\dizzy.wav", NULL, NULL, NULL);
                             if (Hero->dir != dll::dirs::up && Hero->dir != dll::dirs::down)Hero->dir = dll::dirs::stop;
                             break;
                         }
@@ -899,6 +997,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
             for (int i = 0; i < vRocks.size(); i++)
                 Draw->DrawBitmap(bmpRock, D2D1::RectF(vRocks[i].x, vRocks[i].y, vRocks[i].ex, vRocks[i].ey));
         
+        }
+        if (vPlatforms.size() > 0)
+        {
+            for (int i = 0; i < vPlatforms.size(); ++i)
+                Draw->DrawBitmap(bmpPlatform, D2D1::RectF(vPlatforms[i].x, vPlatforms[i].y,
+                    vPlatforms[i].ex, vPlatforms[i].ey));
         }
 
         ////////////////////////////////////////////////////////
