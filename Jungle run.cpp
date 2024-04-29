@@ -75,6 +75,7 @@ ID2D1Bitmap* bmpCloud1 = nullptr;
 ID2D1Bitmap* bmpCloud2 = nullptr;
 ID2D1Bitmap* bmpDizzy = nullptr;
 ID2D1Bitmap* bmpRock = nullptr;
+ID2D1Bitmap* bmpRoger = nullptr;
 
 ID2D1Bitmap* bmpHero[6] = { nullptr };
 ID2D1Bitmap* bmpGorilla1[35] = { nullptr };
@@ -92,6 +93,7 @@ bool b2Hglt = false;
 bool b3Hglt = false;
 bool set_name = false;
 bool on_platform = true;
+bool hero_killed = false;
 
 int dizzy_cooldown = 0;
 
@@ -116,7 +118,11 @@ int score = 0;
 int speed = 1;
 int minutes = 0;
 int seconds = 300;
-int bananas = 0;
+int bananas = 3;
+int killed_delay = 7;
+
+float roger_x = 0;
+float roger_y = 0;
 
 // CREATURES *****************************************
 
@@ -127,7 +133,6 @@ std::vector<dll::ATOM>vRocks;
 std::vector<dll::ATOM>vPlatforms;
 std::vector<dll::ATOM>vBananas;
 std::vector<dll::ATOM>vShots;
-
 
 //////////////////////////////////////////////////////
 
@@ -161,6 +166,7 @@ void ReleaseCOM()
     ClearIt(&statusTxt);
     ClearIt(&bmpDizzy);
     ClearIt(&bmpRock);
+    ClearIt(&bmpRoger);
 
     ClearIt(&bmpBanana);
     ClearIt(&bmpExit);
@@ -200,7 +206,7 @@ void InitGame()
     speed = 1;
     minutes = 0;
     seconds = 300;
-    bananas = 0;
+    bananas = 3;
 
     wcscpy_s(current_player, L"JUNGLE RUNNER");
     set_name = false;
@@ -303,7 +309,9 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
 
     case WM_TIMER:
         if (pause)break;
-        seconds--;
+        if (hero_killed)killed_delay--;
+        if (killed_delay <= 0)GameOver();
+        if (seconds > 0)seconds--;
         if (dizzy_cooldown > 0)dizzy_cooldown--;
         minutes = (int)(floor(seconds / 60));
         break;
@@ -417,6 +425,18 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
             InitGame();
             break;
 
+        case mSpeed:
+            pause = true;
+            if (sound)MessageBeep(MB_ICONEXCLAMATION);
+            if (MessageBox(hwnd, L"Сигурен ли си, че увеличаваш скоростта ?",
+                L"Турбо !", MB_YESNO | MB_APPLMODAL | MB_ICONQUESTION) == IDNO)
+            {
+                pause = false;
+                break;
+            }
+            else speed++;
+            break;
+
         case mExit:
             SendMessage(hwnd, WM_CLOSE, NULL, NULL);
             break;
@@ -465,12 +485,47 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
         }
         break;
 
+    case WM_LBUTTONDOWN:
+        if (HIWORD(lParam) < 50)
+        {
+            if (LOWORD(lParam) >= b1TxtRect.left && LOWORD(lParam) <= b1TxtRect.right)
+            {
+                if (set_name)
+                {
+                    if (sound)mciSendString(L"play .\\res\\snd\\negative.wav", NULL, NULL, NULL);
+                    break;
+                }
+                
+                if (sound)mciSendString(L"play .\\res\\snd\\select.wav", NULL, NULL, NULL);
+
+                if (DialogBox(bIns, MAKEINTRESOURCE(IDD_PLAYER), hwnd, &bDlgProc) == IDOK)set_name = true;
+                break;
+            }
+            if (LOWORD(lParam) >= b2TxtRect.left && LOWORD(lParam) <= b2TxtRect.right)
+            {
+                if (sound)
+                {
+                    sound = false;
+                    PlaySound(NULL, NULL, NULL);
+                    break;
+                }
+                else
+                {
+                    sound = true;
+                    PlaySound(snd_file, NULL, SND_ASYNC | SND_LOOP);
+                    break;
+                }
+            }
+
+
+        }
+        break;
+
     default: return DefWindowProc(hwnd, ReceivedMsg, wParam, lParam);
     }
 
     return(LRESULT)(FALSE);
 }
-////////////////////////////////////////////////////////
 
 void CreateResources()
 {
@@ -665,6 +720,12 @@ void CreateResources()
         LogError(L"Error loading Rock");
         ErrExit(eD2D);
     }
+    bmpRoger = Load(L".\\res\\img\\hollyroger.png", Draw);
+    if (!bmpRoger)
+    {
+        LogError(L"Error loading HollyRoger");
+        ErrExit(eD2D);
+    }
 
     for (int i = 0; i < 6; i++)
     {
@@ -773,8 +834,6 @@ void CreateResources()
     Sleep(1000);
 }
 
-
-
 //////////////////////////////////////////////////
 
 
@@ -807,6 +866,91 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 Draw->DrawTextW(L"ПАУЗА", 6, bigTxt, D2D1::RectF(scr_width / 2 - 50.0f, scr_height / 2 - 50.0f,
                     scr_width, scr_height), Txt);
             Draw->EndDraw();
+            continue;
+        }
+
+        if (hero_killed)
+        {
+            Draw->BeginDraw();
+            if (ButBckg && Txt && HgltTxt && InactTxt && nrmTxt)
+            {
+                Draw->FillRectangle(D2D1::RectF(0, 0, scr_width, 50.0f), ButBckg);
+                if (set_name) Draw->DrawTextW(L"ИМЕ НА ИГРАЧ", 13, nrmTxt, b1TxtRect, InactTxt);
+                else
+                {
+                    if (!b1Hglt)Draw->DrawTextW(L"ИМЕ НА ИГРАЧ", 13, nrmTxt, b1TxtRect, Txt);
+                    else Draw->DrawTextW(L"ИМЕ НА ИГРАЧ", 13, nrmTxt, b1TxtRect, HgltTxt);
+                }
+                if (!b2Hglt)Draw->DrawTextW(L"ЗВУЦИ ON / OFF", 15, nrmTxt, b2TxtRect, Txt);
+                else Draw->DrawTextW(L"ЗВУЦИ ON / OFF", 15, nrmTxt, b2TxtRect, HgltTxt);
+                if (!b3Hglt)Draw->DrawTextW(L"ПОМОЩ ЗА ИГРАТА", 16, nrmTxt, b3TxtRect, Txt);
+                else Draw->DrawTextW(L"ПОМОЩ ЗА ИГРАТА", 16, nrmTxt, b3TxtRect, HgltTxt);
+            }
+
+            Draw->DrawBitmap(bmpField1, Field1Rect);
+            Draw->DrawBitmap(bmpField2, Field2Rect);
+
+            Cloud1.x += 0.5f;
+            Cloud1.SetEdges();
+            Cloud2.x -= 0.3f;
+            Cloud2.SetEdges();
+            if (Cloud1.x >= scr_width)
+            {
+                Cloud1.x = -100.0f;
+                Cloud1.SetEdges();
+            }
+            if (Cloud2.ex <= 0)
+            {
+                Cloud2.x = scr_width;
+                Cloud2.SetEdges();
+            }
+            Draw->DrawBitmap(bmpSun, D2D1::RectF(Sun.x, Sun.y, Sun.ex, Sun.ey));
+            Draw->DrawBitmap(bmpCloud1, D2D1::RectF(Cloud1.x, Cloud1.y, Cloud1.ex, Cloud1.ey));
+            Draw->DrawBitmap(bmpCloud2, D2D1::RectF(Cloud2.x, Cloud2.y, Cloud2.ex, Cloud2.ey));
+
+            Draw->DrawBitmap(bmpRoger, D2D1::RectF(roger_x, roger_y, roger_x + 50.0f, roger_y + 50.0f));
+
+            if (vRocks.size() > 0)
+            {
+                for (int i = 0; i < vRocks.size(); i++)
+                    Draw->DrawBitmap(bmpRock, D2D1::RectF(vRocks[i].x, vRocks[i].y, vRocks[i].ex, vRocks[i].ey));
+
+            }
+            if (vPlatforms.size() > 0)
+            {
+                for (int i = 0; i < vPlatforms.size(); ++i)
+                    Draw->DrawBitmap(bmpPlatform, D2D1::RectF(vPlatforms[i].x, vPlatforms[i].y,
+                        vPlatforms[i].ex, vPlatforms[i].ey));
+            }
+            if (!vBananas.empty())
+            {
+                for (std::vector<dll::ATOM>::iterator it = vBananas.begin(); it < vBananas.end(); it++)
+                    Draw->DrawBitmap(bmpBanana, D2D1::RectF(it->x, it->y, it->ex, it->ey));
+
+            }
+            if (!vGorillas.empty())
+            {
+                for (std::vector<dll::creat_ptr>::iterator it = vGorillas.begin(); it < vGorillas.end(); ++it)
+                {
+                    switch ((*it)->GetType())
+                    {
+                    case dll::types::gorilla1:
+                        Draw->DrawBitmap(bmpGorilla1[(*it)->GetFrame()], D2D1::RectF((*it)->x, (*it)->y, (*it)->ex, (*it)->ey));
+                        break;
+
+                    case dll::types::gorilla2:
+                        Draw->DrawBitmap(bmpGorilla2[(*it)->GetFrame()], D2D1::RectF((*it)->x, (*it)->y, (*it)->ex, (*it)->ey));
+                        break;
+
+                    case dll::types::gorilla3:
+                        Draw->DrawBitmap(bmpGorilla3[(*it)->GetFrame()], D2D1::RectF((*it)->x, (*it)->y, (*it)->ex, (*it)->ey));
+                        break;
+                    }
+                }
+            }
+
+            Draw->EndDraw();
+
             continue;
         }
 
@@ -888,6 +1032,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                     Hero->dir = dll::dirs::stop;
                     on_platform = true;
                     
+                }
+            }
+        }
+
+        if (Hero && !vGorillas.empty())
+        {
+            for (std::vector<dll::creat_ptr>::iterator gor = vGorillas.begin(); gor < vGorillas.end(); ++gor)
+            {
+                if (!(Hero->x > (*gor)->ex || Hero->ex < (*gor)->x || Hero->y >(*gor)->ey || Hero->ey < (*gor)->y))
+                {
+                    roger_x = Hero->x + 20.0f;
+                    roger_y = Hero->y + 20.0f;
+                    hero_killed = true;
+                    if (sound)mciSendString(L"play .\\res\\snd\\killed.wav", NULL, NULL, NULL);
+                    ClearIt(&Hero);
+                    break;
                 }
             }
         }
@@ -1014,7 +1174,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
         {
             for (std::vector<dll::creat_ptr>::iterator it = vGorillas.begin(); it < vGorillas.end(); it++)
             {
-                if ((*it)->Move(speed) == FAIL)
+                if ((*it)->Move((float)(speed)) == FAIL)
                 {
                     (*it)->Release();
                     vGorillas.erase(it);
@@ -1023,9 +1183,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
             }
         }
 
-
-
-
+        if (!vGorillas.empty() && !vShots.empty())
+        {
+            for (std::vector<dll::ATOM>::iterator ban = vShots.begin(); ban < vShots.end(); ban++)
+            {
+                bool shot = false;
+                for (std::vector<dll::creat_ptr>::iterator gor = vGorillas.begin(); gor < vGorillas.end(); gor++)
+                {
+                    if (!((*gor)->x > ban->ex || (*gor)->ex<ban->x || (*gor)->y>ban->ey || (*gor)->ey < ban->y))
+                    {
+                        if (sound)mciSendString(L"play .\\res\\snd\\gorillakilled.wav", NULL, NULL, NULL);
+                        score += 20 * speed;
+                        (*gor)->Release();
+                        vGorillas.erase(gor);
+                        vShots.erase(ban);
+                        shot = true;
+                        break;
+                    }
+                }
+                if (shot)break;
+            }
+        }
 
         ////////////////////////////////////////////////////////
 
