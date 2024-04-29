@@ -94,6 +94,7 @@ bool b3Hglt = false;
 bool set_name = false;
 bool on_platform = true;
 bool hero_killed = false;
+bool win_game = false;
 
 int dizzy_cooldown = 0;
 
@@ -133,6 +134,7 @@ std::vector<dll::ATOM>vRocks;
 std::vector<dll::ATOM>vPlatforms;
 std::vector<dll::ATOM>vBananas;
 std::vector<dll::ATOM>vShots;
+dll::ATOM* Exit = nullptr;
 
 //////////////////////////////////////////////////////
 
@@ -205,7 +207,7 @@ void InitGame()
     score = 0;
     speed = 1;
     minutes = 0;
-    seconds = 300;
+    seconds = 30;
     bananas = 3;
 
     wcscpy_s(current_player, L"JUNGLE RUNNER");
@@ -225,6 +227,14 @@ void InitGame()
     vShots.clear();
 
     Hero = dll::iFactory(dll::types::hero, scr_height - 180.0f);
+    
+    if (Exit)
+    {
+        delete Exit;
+        Exit = nullptr;
+    }
+    win_game = false;
+
 }
 
 INT_PTR CALLBACK bDlgProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lParam)
@@ -311,7 +321,13 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
         if (pause)break;
         if (hero_killed)killed_delay--;
         if (killed_delay <= 0)GameOver();
+        if (win_game)break;
         if (seconds > 0)seconds--;
+        else
+        {
+            win_game = true;
+            Exit = new dll::ATOM(scr_width, scr_height - 170.0f, 70.0f, 70.0f);
+        }
         if (dizzy_cooldown > 0)dizzy_cooldown--;
         minutes = (int)(floor(seconds / 60));
         break;
@@ -1096,6 +1112,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
                 }
             }
         }
+
+        if (Exit)
+        {
+            Exit->x -= speed;
+            Exit->SetEdges();
+            if(Hero)
+                if (Exit->ex <= Hero->x)
+                {
+                    score += 1000;
+                    GameOver();
+                }
+        }
         /////////////////////////////////////
 
         //BANANAS ***************************
@@ -1322,6 +1350,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
         }
 
         Draw->DrawTextW(stat_txt, txt_size, statusTxt, D2D1::RectF(20.0f, scr_height - 50.0f, scr_width, scr_height), InactTxt);
+
+        if (Exit)
+            Draw->DrawBitmap(bmpExit, D2D1::RectF(Exit->x, Exit->y, Exit->ex, Exit->ey));
         
         ////////////////////////////////////////////////////////////
 
