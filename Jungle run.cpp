@@ -298,6 +298,71 @@ void InitGame()
     win_game = false;
 
 }
+void SaveGame()
+{
+    int result = 0;
+    CheckFile(save_file, &result);
+    if (result == FILE_EXIST)
+    {
+        if (sound)MessageBeep(MB_ICONASTERISK);
+        if (MessageBox(bHwnd, L"Съществува записана игра, която ще загубиш !\n\nДа я презапиша ли ?",
+            L"Презапис ?", MB_YESNO | MB_APPLMODAL | MB_ICONQUESTION) == IDNO)return;
+    }
+
+    std::wofstream save(save_file);
+
+    save << score << std::endl;
+    save << bananas << std::endl;
+    save << seconds << std::endl;
+    for (int i = 0; i < 16; i++)save << static_cast<int>(current_player[i]) << std::endl;
+    save << set_name << std::endl;
+    save << dizzy_cooldown << std::endl;
+    
+    if (!Hero)save << 0 << std::endl;
+    else save << Hero->x << std::endl;
+
+    save << vRocks.size() << std::endl;
+    if (!vRocks.empty())
+        for (int i = 0; i < vRocks.size(); i++)save << vRocks[i].x << std::endl;
+
+    save << vPlatforms.size() << std::endl;
+    if (!vPlatforms.empty())
+        for (int i = 0; i < vPlatforms.size(); i++)save << vRocks[i].x << std::endl;
+
+    save << vBananas.size() << std::endl;
+    if (!vBananas.empty())
+        for (int i = 0; i < vBananas.size(); i++)
+        {
+            save << vBananas[i].x << std::endl;
+            save << vBananas[i].y << std::endl;
+        }
+
+    save << win_game << std::endl;
+
+    if (!Exit)save << 0 << std::endl;
+    else save << Exit->x << std::endl;
+
+    save << hero_killed << std::endl;
+    if (hero_killed)
+    {
+        save << roger_x << std::endl;
+        save << roger_y << std::endl;
+        save << killed_delay << std::endl;
+    }
+
+    save << vGorillas.size();
+    if (!vGorillas.empty())
+    {
+        for (int i = 0; i < vGorillas.size(); i++)
+        {
+            save << static_cast<int>(vGorillas[i]->GetType()) << std::endl;
+            save << vGorillas[i]->x << std::endl;
+        }
+    }
+
+    if (sound)mciSendString(L"play .\\res\\snd\\save.wav", NULL, NULL, NULL);
+    MessageBox(bHwnd, L"Играта е запазена !", L"Запис !", MB_OK | MB_APPLMODAL | MB_ICONINFORMATION);
+}
 
 void HallOfFame()
 {
@@ -563,14 +628,17 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
             SendMessage(hwnd, WM_CLOSE, NULL, NULL);
             break;
 
-
+        case mSave:
+            pause = true;
+            SaveGame();
+            pause = false;
+            break;
 
         case mHoF:
             pause = true;
             HallOfFame();
             pause = false;
             break;
-
         }
         break;
 
