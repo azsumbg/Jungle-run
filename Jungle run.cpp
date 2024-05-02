@@ -575,7 +575,7 @@ void ShowHelp()
         showtxt[i] = static_cast<wchar_t>(letter);
     }
 
-    if (sound)mciSendString(L"play .\\res\\snsd\\tada.wav", NULL, NULL, NULL);
+    if (sound)mciSendString(L"play .\\res\\snsd\\help.wav", NULL, NULL, NULL);
     
     Draw->BeginDraw();
     Draw->Clear(D2D1::ColorF(D2D1::ColorF::DarkOliveGreen));
@@ -1245,7 +1245,6 @@ void CreateResources()
 
 //////////////////////////////////////////////////
 
-
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
     bIns = hInstance;
@@ -1257,6 +1256,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 
     CreateResources();
 
+    PlaySound(snd_file, NULL, SND_ASYNC | SND_LOOP);
     while (bMsg.message != WM_QUIT)
     {
         if ((bRet = PeekMessage(&bMsg, bHwnd, NULL, NULL, PM_REMOVE)) != 0)
