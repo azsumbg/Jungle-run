@@ -350,7 +350,7 @@ void SaveGame()
         save << killed_delay << std::endl;
     }
 
-    save << vGorillas.size();
+    save << vGorillas.size() << std::endl;
     if (!vGorillas.empty())
     {
         for (int i = 0; i < vGorillas.size(); i++)
@@ -363,7 +363,152 @@ void SaveGame()
     if (sound)mciSendString(L"play .\\res\\snd\\save.wav", NULL, NULL, NULL);
     MessageBox(bHwnd, L"Играта е запазена !", L"Запис !", MB_OK | MB_APPLMODAL | MB_ICONINFORMATION);
 }
+void LoadGame()
+{
+    int result = 0;
+    CheckFile(save_file, &result);
+    if (result == FILE_NOT_EXIST)
+    {
+        if (sound)MessageBeep(MB_ICONEXCLAMATION);
+        MessageBox(bHwnd, L"Все още няма записана игра !\n\nПостарай се повече !",
+            L"Липсва файл !", MB_OK | MB_APPLMODAL | MB_ICONEXCLAMATION);
+        return;
+    }
+    else
+    {
+        if (sound)MessageBeep(MB_ICONASTERISK);
+        if (MessageBox(bHwnd, L"Настоящата игра ще бъде загубена !\n\nДа я презапиша ли ?",
+            L"Презапис ?", MB_YESNO | MB_APPLMODAL | MB_ICONQUESTION) == IDNO)return;
+    }
+    ////////////////////////////////////////
+    vRocks.clear();
 
+    ClearIt(&Hero);
+
+    if (!vGorillas.empty())
+    {
+        for (int i = 0; i < vGorillas.size(); ++i)ClearIt(&vGorillas[i]);
+    }
+    vGorillas.clear();
+    vPlatforms.clear();
+    vBananas.clear();
+    vShots.clear();
+
+    if (Exit)
+    {
+        delete Exit;
+        Exit = nullptr;
+    }
+    ///////////////////////////////////////
+
+    std::wifstream save(save_file);
+    float tempx = 0;
+    float tempy = 0;
+    result = 0;
+
+    save >> score;
+    save >> bananas;
+    save >> seconds;
+    for (int i = 0; i < 16; i++)
+    {
+        int letter = 0;
+        save >> letter;
+        current_player[i] = static_cast<wchar_t>(letter);
+    }
+    save >> set_name;
+    save >> dizzy_cooldown;
+
+    save >> tempx;
+    if (tempx == 0)
+    {
+        hero_killed = 0;
+        killed_delay = 7;
+    }
+    else
+    {
+        Hero = dll::iFactory(dll::types::hero, scr_height - 180.0f);
+        Hero->x = tempx;
+        Hero->SetEdges();
+    }
+
+    save >> result;
+    if (result > 0)
+    {
+        for (int i = 0; i < result; i++)
+        {
+            save >> tempx;
+            vRocks.push_back(dll::ATOM(tempx, scr_height - 138, 50.0f, 38.0f));
+        }
+    }
+
+    save >> result;
+    if (result > 0)
+    {
+        for (int i = 0; i < result; i++)
+        {
+            save >> tempx;
+            vPlatforms.push_back(dll::ATOM(tempx, scr_height - 250.0f, 100.0f, 17.0f));
+        }
+    }
+
+    save >> result;
+    if (result > 0)
+    {
+        for (int i = 0; i < result; i++)
+        {
+            save >> tempx;
+            save >> tempy;
+            vBananas.push_back(dll::ATOM(tempx, tempy, 20.0f, 13.0f));
+        }
+    }
+
+    save >> win_game;
+
+    save >> tempx;
+    if (tempx > 0)Exit = new dll::ATOM(tempx, scr_height - 170.0f, 70.0f, 70.0f);
+
+    save >> hero_killed;
+    if (hero_killed)
+    {
+        save >> roger_x;
+        save >> roger_y;
+        save >> killed_delay;
+    }
+
+    save >> result;
+    if (result > 0)
+    {
+        for (int i = 0; i < result; i++)
+        {
+            int atype = -1;
+            save >> atype;
+            save >> tempx;
+
+            dll::types gorilla_type = static_cast<dll::types>(atype);
+
+            switch (gorilla_type)
+            {
+            case dll::types::gorilla1:
+                vGorillas.push_back(dll::iFactory(dll::types::gorilla1, scr_height - 170.0f));
+                break;
+
+            case dll::types::gorilla2:
+                vGorillas.push_back(dll::iFactory(dll::types::gorilla2, scr_height - 200.0f));
+                break;
+
+            case dll::types::gorilla3:
+                vGorillas.push_back(dll::iFactory(dll::types::gorilla3, scr_height - 190.0f));
+                break;
+            }
+
+            vGorillas.back()->x = tempx;
+            vGorillas.back()->SetEdges();
+        }
+    }
+
+    if (sound)mciSendString(L"play .\\res\\snd\\save.wav", NULL, NULL, NULL);
+    MessageBox(bHwnd, L"Играта е заредена !", L"Запис !", MB_OK | MB_APPLMODAL | MB_ICONINFORMATION);
+}
 void HallOfFame()
 {
     wchar_t status[200] = L"НАЙ-ДОБЪР БЕГАЧ: ";
@@ -406,6 +551,51 @@ void HallOfFame()
         Draw->DrawTextW(status, result, statusTxt, D2D1::RectF(100.0f, scr_height / 2 - 100.0f, scr_width, scr_height), InactTxt);
     Draw->EndDraw();
     Sleep(3000);
+}
+void ShowHelp()
+{
+    int result = 0;
+    CheckFile(hlp_file, &result);
+    if (result == FILE_NOT_EXIST)
+    {
+        if (sound)MessageBeep(MB_ICONERROR);
+        MessageBox(bHwnd, L"Грешка при зареждане на информацията !\n\nСвържете се с разработчика !",
+            L"Липсва файл !", MB_OK | MB_APPLMODAL | MB_ICONERROR);
+        return;
+    }
+
+    wchar_t showtxt[1000] = L"\0";
+    int txt_size = 0;
+    std::wifstream hlp(hlp_file);
+    hlp >> txt_size;
+    for (int i = 0; i < txt_size; i++)
+    {
+        int letter = 0;
+        hlp >> letter;
+        showtxt[i] = static_cast<wchar_t>(letter);
+    }
+
+    if (sound)mciSendString(L"play .\\res\\snsd\\tada.wav", NULL, NULL, NULL);
+    
+    Draw->BeginDraw();
+    Draw->Clear(D2D1::ColorF(D2D1::ColorF::DarkOliveGreen));
+    if (ButBckg && Txt && HgltTxt && InactTxt && nrmTxt)
+    {
+        Draw->FillRectangle(D2D1::RectF(0, 0, scr_width, 50.0f), ButBckg);
+        if (set_name) Draw->DrawTextW(L"ИМЕ НА ИГРАЧ", 13, nrmTxt, b1TxtRect, InactTxt);
+        else
+        {
+            if (!b1Hglt)Draw->DrawTextW(L"ИМЕ НА ИГРАЧ", 13, nrmTxt, b1TxtRect, Txt);
+            else Draw->DrawTextW(L"ИМЕ НА ИГРАЧ", 13, nrmTxt, b1TxtRect, HgltTxt);
+        }
+        if (!b2Hglt)Draw->DrawTextW(L"ЗВУЦИ ON / OFF", 15, nrmTxt, b2TxtRect, Txt);
+        else Draw->DrawTextW(L"ЗВУЦИ ON / OFF", 15, nrmTxt, b2TxtRect, HgltTxt);
+        if (!b3Hglt)Draw->DrawTextW(L"ПОМОЩ ЗА ИГРАТА", 16, nrmTxt, b3TxtRect, Txt);
+        else Draw->DrawTextW(L"ПОМОЩ ЗА ИГРАТА", 16, nrmTxt, b3TxtRect, HgltTxt);
+    }
+    if (InactTxt && statusTxt)
+        Draw->DrawTextW(showtxt, txt_size, statusTxt, D2D1::RectF(100.0f, 100.0f, scr_width, scr_height), InactTxt);
+    Draw->EndDraw();
 }
 
 INT_PTR CALLBACK bDlgProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lParam)
@@ -634,6 +824,12 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
             pause = false;
             break;
 
+        case mLoad:
+            pause = true;
+            LoadGame();
+            pause = false;
+            break;
+
         case mHoF:
             pause = true;
             HallOfFame();
@@ -699,6 +895,7 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
             }
             if (LOWORD(lParam) >= b2TxtRect.left && LOWORD(lParam) <= b2TxtRect.right)
             {
+                mciSendString(L"play .\\res\\snd\\select.wav", NULL, NULL, NULL);
                 if (sound)
                 {
                     sound = false;
@@ -712,8 +909,24 @@ LRESULT CALLBACK bWinProc(HWND hwnd, UINT ReceivedMsg, WPARAM wParam, LPARAM lPa
                     break;
                 }
             }
-
-
+            if (LOWORD(lParam) >= b3TxtRect.left && LOWORD(lParam) <= b3TxtRect.right)
+            {
+                if (sound)mciSendString(L"play .\\res\\snd\\select.wav", NULL, NULL, NULL);
+            
+                if (!show_help)
+                {
+                    show_help = true;
+                    pause = true;
+                    ShowHelp();
+                    break;
+                }
+                else
+                {
+                    show_help = false;
+                    pause = false;
+                    break;
+                }
+            }
         }
         break;
 
